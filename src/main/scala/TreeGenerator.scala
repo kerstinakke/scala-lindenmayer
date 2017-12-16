@@ -1,33 +1,68 @@
-import org.scalajs.dom
-import org.scalajs.dom.html
-
+import org.scalajs.dom._
+import japgolly.scalajs.react._
+import japgolly.scalajs.react.vdom.html_<^._
 
 object TreeGenerator {
   val root = "--S" //Starting point: two straights and a split-point
-  var memory = List.empty[String]
 
-  def makeNext():Unit = if(memory.isEmpty) {
-    memory = root :: memory
+  case class State(memory:List[String],future:List[String])
+
+  class Reactor($: BackendScope[Unit, State]){
+
+    def render(state: State) = {
+      if (!state.memory.isEmpty) draw(state.memory.head)
+      <.div(
+      <.button("Uus",^.onClick==>drawNext),
+      <.button("Järgmine",^.disabled:=(state.future.isEmpty))
+    )
+    }
+
+
+    def drawNext(e: ReactEventFromInput): CallbackTo[Unit] = {
+      $.modState(s=> State(makeNext(if(s.memory.isEmpty) "" else s.memory.head)::s.memory,"-"::Nil))
+    }
+
+
+
   }
 
-  def draw(c: html.Canvas):Unit = {
-    type Ctx2D =
-      dom.CanvasRenderingContext2D
-    val ctx = c.getContext("2d")
-      .asInstanceOf[Ctx2D]
-    val w = 300
-    c.width = w
-    c.height = w
+  private val component = ScalaComponent.builder[Unit]("TreeGenerator")
+    .initialState(State(List.empty[String],List.empty[String]))
+    .renderBackend[Reactor]
+    .build
+
+  def renderInto(c: Element): Unit = {
+    component().renderIntoDOM(c)
+  }
+
+  def makeNext(current:String):String = {
+    def nextStep(acc:String, c:Char):String = c match {
+      case 'S' => acc + "-S"
+      case other => acc + other
+    }
+    if(current.isEmpty) root else current.foldLeft("")(nextStep)
+
+  }
+
+  def draw(tree:String):Unit = {
+    val canvas = document.getElementById("treeCanvas").asInstanceOf[html.Canvas]
+    val ctx = canvas.getContext("2d")
+    val w = canvas.width
+    val h = canvas.height
+    var current = h
+    val len = 5
 
     ctx.strokeStyle = "red"
     ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.moveTo(w/3, 0)
-    ctx.lineTo(w/3, w/3)
-    ctx.moveTo(w*2/3, 0)
-    ctx.lineTo(w*2/3, w/3)
-    ctx.moveTo(w, w/2)
-    ctx.arc(w/2, w/2, w/2, 0, 3.14)
+    ctx.moveTo(w/2,current)
+
+    tree.foreach( _ match {
+      case '-' =>
+        current-=len
+        ctx.lineTo(w/2,current)
+      case _ => ()
+    })
 
     ctx.stroke()
   }
