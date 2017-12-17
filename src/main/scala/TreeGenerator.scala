@@ -12,21 +12,20 @@ object TreeGenerator {
   // TODO: Write legend somehere
   val rules = Map(
     'S'->Map(
-      ".S"->0.1,
-      ".[(30).B][(-30).B]S"->0.5,
-      ".[(30).B]S"->0.2,
-      ".[(-30).B]S"->0.2,
+      "..S"->0.6,
+      ".[(30)..B][(-30)..B]S"->0.2,
+      ".[(30)..B]S"->0.1,
+      ".[(-30)..B]S"->0.1,
     ),
     'B'->Map(
-      ".B"->0.3,
-      ".[(30).B][(-30).B]"->0.15,
-      ".[(30).B]B"->0.15,
-      ".[(-30).B]B"->0.15,
-      "..L"->0.25
+      "..[(30).B][(-30).B]B"->0.2,
+      ".[(30).B]B"->0.2,
+      ".[(-30).B]B"->0.2,
+      "<.L"->0.4
     ),
     'L'->Map(
-      ".*"->0.3,
-      "[(40)*][(-40)*]"->0.7
+      "[(40).*]*[(-40).*]"->0.7,
+      "[(40).*][(-40).*]"->0.3
     )
 
   ).withDefaultValue(Map.empty[String,Double])
@@ -40,17 +39,19 @@ object TreeGenerator {
 
     // TODO: Show current tree as string
     def render(state: State) = {
-      if (!state.memory.isEmpty) draw(state.memory.head,state.memory.size+3)
+      draw(  if (state.memory.isEmpty) "" else state.memory.head ,state.memory.size+3)
       <.div(
         <.button("Uus", ^.onClick ==> drawNew),
-        <.button("Eelmine", ^.disabled := (state.memory.isEmpty || state.memory.size == 1), ^.onClick ==> drawPrev),
-        <.button("Järgmine", ^.disabled := (state.future.isEmpty), ^.onClick ==> drawNext)
+        <.button("Eelmine", ^.disabled := (state.memory.isEmpty ), ^.onClick ==> drawPrev),
+        <.button("Järgmine", ^.disabled := (state.future.isEmpty), ^.onClick ==> drawNext),
+        <.p(state.memory.size)
       )
+
     }
 
     def drawNew(e: ReactEventFromInput): CallbackTo[Unit] = {
       $.modState(s => {
-        if (s.memory.isEmpty) State(makeNext("") :: "" :: Nil, List.empty[String])
+        if (s.memory.isEmpty) State(makeNext("") :: Nil, List.empty[String])
         else State(makeNext(s.memory.head) :: s.memory, List.empty[String])
       })
     }
@@ -104,7 +105,7 @@ object TreeGenerator {
 
   def draw(tree: String,startWidth:Int): Unit = {
 
-    case class DrawingDetails(pos:(Int,Int),direction:(Double,Double),len:Int,width:Int){
+    case class DrawingDetails(pos:(Int,Int),direction:(Double,Double),len:Int,width:Double){
       def getCos(degrees:Int):Double = Math.cos(Math.toRadians(degrees))
       def getSin(degrees:Int):Double = Math.sin(Math.toRadians(degrees))
 
@@ -114,9 +115,9 @@ object TreeGenerator {
       def newPos(): (Int,Int) = (Math.round(pos._1+len*direction._1).asInstanceOf[Int],Math.round(pos._2+len*direction._2).asInstanceOf[Int])
       def draw():DrawingDetails = {
         ctx.beginPath()
-        ctx.moveTo(pos._1,pos._2)
-        ctx.lineWidth = Math.max(width,1)
-        val newDetails = copy(pos=newPos,width=width-1)
+        ctx.moveTo(pos._1+0.1,pos._2+0.1)
+        ctx.lineWidth = Math.max(width.asInstanceOf[Int],1)
+        val newDetails = copy(pos=newPos,width=width-0.4)
         ctx.lineTo(newDetails.pos._1,newDetails.pos._2)
         ctx.stroke()
         newDetails
@@ -131,7 +132,7 @@ object TreeGenerator {
 
     ctx.fillStyle = "white"
     ctx.fillRect(0, 0, w, h)
-    ctx.strokeStyle = "red"
+    ctx.strokeStyle = "brown"
 
     var current = stack.head
     var numToParse = ""
@@ -141,13 +142,11 @@ object TreeGenerator {
     tree.foreach(_ match {
       case '.' =>
         current = current.draw()
-      case '*' =>
-        ctx.strokeStyle="green"
-        current.copy(len=10,width=6).draw()
-        ctx.strokeStyle="red"
       case '[' =>
         stack = current::stack
-        current = current.copy(len=current.len-1,width=current.width-2)
+        current = current.copy(width=current.width-1)
+      case '<' =>
+        current = current.copy(width=current.width-startWidth*0.5)
       case ']' =>
         current = stack.head
         stack=stack.tail
@@ -155,11 +154,13 @@ object TreeGenerator {
         numToParse=""
         waitingNumber = true
       case ')' =>
-        current = current.copy(direction = current.turn(Integer.parseInt(numToParse)))
+        current = current.copy(direction = current.turn(Integer.parseInt(numToParse)),len=current.len-1)
         waitingNumber = false
-      case '-' if waitingNumber =>
-        numToParse+='-'
       case c if waitingNumber => numToParse+=c
+      case c if c.isUpper || c.equals('*') =>
+        ctx.strokeStyle="green"
+        current.copy(len=10,width=Math.max(6,current.width*1.5)).draw()
+        ctx.strokeStyle="brown"
       case _ => ()
     })
 
