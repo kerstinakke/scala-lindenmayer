@@ -12,10 +12,24 @@ object TreeGenerator {
   // TODO: Write legend somehere
   val rules = Map(
     'S'->Map(
-      ".S"->0.29,
-      ".[(30).S][(-30).S]"->0.7,
-      ".."->0.01
-    ).withDefaultValue(0.0)).withDefaultValue(Map.empty[String,Double])
+      ".S"->0.1,
+      ".[(30).B][(-30).B]S"->0.5,
+      ".[(30).B]S"->0.2,
+      ".[(-30).B]S"->0.2,
+    ),
+    'B'->Map(
+      ".B"->0.3,
+      ".[(30).B][(-30).B]"->0.15,
+      ".[(30).B]B"->0.15,
+      ".[(-30).B]B"->0.15,
+      "..L"->0.25
+    ),
+    'L'->Map(
+      ".*"->0.3,
+      "[(40)*][(-40)*]"->0.7
+    )
+
+  ).withDefaultValue(Map.empty[String,Double])
 
   val canvas = document.getElementById("treeCanvas").asInstanceOf[html.Canvas]
   val ctx = canvas.getContext("2d")
@@ -26,7 +40,7 @@ object TreeGenerator {
 
     // TODO: Show current tree as string
     def render(state: State) = {
-      if (!state.memory.isEmpty) draw(state.memory.head)
+      if (!state.memory.isEmpty) draw(state.memory.head,state.memory.size+3)
       <.div(
         <.button("Uus", ^.onClick ==> drawNew),
         <.button("Eelmine", ^.disabled := (state.memory.isEmpty || state.memory.size == 1), ^.onClick ==> drawPrev),
@@ -79,7 +93,7 @@ object TreeGenerator {
 
   def makeNext(current: String): String = {
     def nextStep(acc: String, c: Char): String = c match {
-      case 'S' => acc + applyRule(c)
+      case c if c.isUpper => acc + applyRule(c)
       case other => acc + other
     }
 
@@ -87,46 +101,55 @@ object TreeGenerator {
 
   }
 
-  case class DrawingDetails(pos:(Int,Int),direction:(Double,Double),len:Int){
-    def getCos(degrees:Int):Double = Math.cos(Math.toRadians(degrees))
-    def getSin(degrees:Int):Double = Math.sin(Math.toRadians(degrees))
 
-    def turn(degrees:Int):(Double,Double) = {
-      (getCos(degrees)*direction._1-getSin(degrees)*direction._2,direction._1*getSin(degrees)+direction._2*getCos(degrees))
+  def draw(tree: String,startWidth:Int): Unit = {
+
+    case class DrawingDetails(pos:(Int,Int),direction:(Double,Double),len:Int,width:Int){
+      def getCos(degrees:Int):Double = Math.cos(Math.toRadians(degrees))
+      def getSin(degrees:Int):Double = Math.sin(Math.toRadians(degrees))
+
+      def turn(degrees:Int):(Double,Double) = {
+        (getCos(degrees)*direction._1-getSin(degrees)*direction._2,direction._1*getSin(degrees)+direction._2*getCos(degrees))
+      }
+      def newPos(): (Int,Int) = (Math.round(pos._1+len*direction._1).asInstanceOf[Int],Math.round(pos._2+len*direction._2).asInstanceOf[Int])
+      def draw():DrawingDetails = {
+        ctx.beginPath()
+        ctx.moveTo(pos._1,pos._2)
+        ctx.lineWidth = Math.max(width,1)
+        val newDetails = copy(pos=newPos,width=width-1)
+        ctx.lineTo(newDetails.pos._1,newDetails.pos._2)
+        ctx.stroke()
+        newDetails
+      }
     }
-    def newPos(): (Int,Int) = (Math.round(pos._1+len*direction._1).asInstanceOf[Int],Math.round(pos._2+len*direction._2).asInstanceOf[Int])
-  }
 
-  def draw(tree: String): Unit = {
+
     val w = canvas.width
     val h = canvas.height
 
-    var stack = List(DrawingDetails((w/2,h),(0,-1),20))
+    var stack = List(DrawingDetails((w/2,h),(0,-1),20,startWidth))
 
     ctx.fillStyle = "white"
     ctx.fillRect(0, 0, w, h)
     ctx.strokeStyle = "red"
-    ctx.lineWidth = 3
-    ctx.beginPath()
 
     var current = stack.head
     var numToParse = ""
     var waitingNumber = false
-    ctx.moveTo(current.pos._1,current.pos._2)
 
-    console.log(tree)
+    //console.log(tree)
     tree.foreach(_ match {
       case '.' =>
-        current = current.copy(pos=current.newPos())
-        ctx.lineTo(current.pos._1,current.pos._2)
+        current = current.draw()
+      case '*' =>
+        ctx.strokeStyle="green"
+        current.copy(len=10,width=6).draw()
+        ctx.strokeStyle="red"
       case '[' =>
-        stack=current::stack
-        ctx.strokeStyle = "red"
+        stack = current::stack
+        current = current.copy(len=current.len-1,width=current.width-2)
       case ']' =>
-        current=stack.head
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.moveTo(current.pos._1,current.pos._2)
+        current = stack.head
         stack=stack.tail
       case '(' =>
         numToParse=""
@@ -136,7 +159,6 @@ object TreeGenerator {
         waitingNumber = false
       case '-' if waitingNumber =>
         numToParse+='-'
-        ctx.strokeStyle = "green"
       case c if waitingNumber => numToParse+=c
       case _ => ()
     })
